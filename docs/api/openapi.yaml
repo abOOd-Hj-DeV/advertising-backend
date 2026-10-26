@@ -1,0 +1,1170 @@
+openapi: 3.1.0
+info:
+  title: Sooqna API — سوقنا
+  version: 1.0.0
+  description: |
+    عقد الـAPI لتطبيق الإعلانات المبوّبة (سوق سوريا، واجهة عربية RTL).
+    اصطلاحات: `/api/v1`، JSON، `Accept-Language: ar`، ترقيم Cursor،
+    أخطاء RFC 9457 Problem Details، `Idempotency-Key` على عمليات الإنشاء،
+    `If-Match` للتحرير المتزامن، ULID للمعرّفات، ISO-8601 UTC، مبالغ بالسنت.
+servers:
+  - url: https://api.sooqna.example/api/v1
+  - url: http://localhost:8000/api/v1
+tags:
+  - { name: auth, description: المصادقة والجلسات }
+  - { name: me, description: الحساب والأجهزة والموافقات }
+  - { name: merchant, description: الملف التجاري والتحقق }
+  - { name: catalog, description: التصنيفات والخصائص والمواقع }
+  - { name: listings, description: الإعلانات }
+  - { name: drafts, description: المسودات }
+  - { name: media, description: الصور }
+  - { name: sellers, description: صفحة البائع العامة }
+  - { name: engagement, description: مفضلة وأبحاث ومتابعة }
+  - { name: messaging, description: المحادثات والرسائل }
+  - { name: safety, description: حظر وبلاغات }
+  - { name: notifications, description: الإشعارات }
+  - { name: ops, description: فحوص التشغيل }
+
+paths:
+  /health:
+    get:
+      tags: [ops]
+      summary: Liveness — لا يفحص تبعيات
+      operationId: health
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Health' } } } }
+  /ready:
+    get:
+      tags: [ops]
+      summary: Readiness — DB وRedis والتخزين
+      operationId: ready
+      responses:
+        '200': { description: جاهز, content: { application/json: { schema: { $ref: '#/components/schemas/Health' } } } }
+        '503': { $ref: '#/components/responses/Problem' }
+
+  /auth/register:
+    post:
+      tags: [auth]
+      summary: تسجيل حساب (خاص أو تجاري)
+      operationId: register
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password, display_name, account_type, accept_terms_version]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string, minLength: 10 }
+                display_name: { type: string, minLength: 2, maxLength: 40 }
+                account_type: { type: string, enum: [private, commercial] }
+                accept_terms_version: { type: string, example: '2026-10' }
+                captcha_token: { type: string, description: الويب فقط }
+      responses:
+        '201':
+          description: أُنشئ الحساب؛ يتطلب تأكيد البريد
+          content: { application/json: { schema: { $ref: '#/components/schemas/AuthSession' } } }
+        '422': { $ref: '#/components/responses/Problem' }
+        '429': { $ref: '#/components/responses/Problem' }
+  /auth/login:
+    post:
+      tags: [auth]
+      operationId: login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password, device_name]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string }
+                device_name: { type: string, example: 'Pixel 9' }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/AuthSession' } } } }
+        '401': { $ref: '#/components/responses/Problem' }
+        '429': { $ref: '#/components/responses/Problem' }
+  /auth/logout:
+    post:
+      tags: [auth]
+      operationId: logout
+      security: [{ bearerAuth: [] }]
+      responses: { '204': { description: أُبطل التوكن الحالي } }
+  /auth/logout-all:
+    post:
+      tags: [auth]
+      operationId: logoutAll
+      security: [{ bearerAuth: [] }]
+      responses: { '204': { description: أُبطلت كل التوكنات } }
+  /auth/email/verify:
+    post:
+      tags: [auth]
+      summary: تأكيد البريد بالرمز/الرابط
+      operationId: verifyEmail
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties: { token: { type: string } }
+      responses:
+        '200': { description: OK }
+        '422': { $ref: '#/components/responses/Problem' }
+  /auth/email/resend:
+    post:
+      tags: [auth]
+      operationId: resendVerification
+      security: [{ bearerAuth: [] }]
+      responses: { '202': { description: أُرسل إن لم يكن مؤكدًا }, '429': { $ref: '#/components/responses/Problem' } }
+  /auth/password/forgot:
+    post:
+      tags: [auth]
+      operationId: forgotPassword
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties: { email: { type: string, format: email } }
+      responses: { '202': { description: ردّ موحّد دائمًا (لا يكشف وجود البريد) }, '429': { $ref: '#/components/responses/Problem' } }
+  /auth/password/reset:
+    post:
+      tags: [auth]
+      operationId: resetPassword
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, token, password]
+              properties:
+                email: { type: string, format: email }
+                token: { type: string }
+                password: { type: string, minLength: 10 }
+      responses:
+        '200': { description: أُعيدت الضبط وأُبطلت كل التوكنات }
+        '422': { $ref: '#/components/responses/Problem' }
+  /auth/password:
+    put:
+      tags: [auth]
+      operationId: changePassword
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [current_password, password]
+              properties:
+                current_password: { type: string }
+                password: { type: string, minLength: 10 }
+      responses:
+        '200': { description: تغيّرت؛ أُبطلت التوكنات الأخرى }
+        '422': { $ref: '#/components/responses/Problem' }
+
+  /me:
+    get:
+      tags: [me]
+      operationId: getMe
+      security: [{ bearerAuth: [] }]
+      responses: { '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/User' } } } } }
+    patch:
+      tags: [me]
+      operationId: updateMe
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                display_name: { type: string, minLength: 2, maxLength: 40 }
+                default_location_id: { $ref: '#/components/schemas/Ulid' }
+                locale: { type: string, example: ar }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/User' } } } }
+        '422': { $ref: '#/components/responses/Problem' }
+  /me/notification-preferences:
+    get:
+      tags: [me]
+      operationId: getNotificationPrefs
+      security: [{ bearerAuth: [] }]
+      responses: { '200': { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/NotificationPreference' } } } } } }
+    put:
+      tags: [me]
+      operationId: putNotificationPrefs
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items: { $ref: '#/components/schemas/NotificationPreference' }
+      responses: { '200': { description: OK } }
+  /me/consents:
+    get:
+      tags: [me]
+      operationId: getConsents
+      security: [{ bearerAuth: [] }]
+      responses: { '200': { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Consent' } } } } } }
+    post:
+      tags: [me]
+      operationId: postConsent
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [purpose, version, granted]
+              properties:
+                purpose: { type: string, enum: [terms, privacy, marketing, analytics] }
+                version: { type: string }
+                granted: { type: boolean }
+      responses: { '201': { description: سُجل (إلحاقي) } }
+  /me/devices:
+    post:
+      tags: [me]
+      operationId: registerDevice
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [platform, fcm_token]
+              properties:
+                platform: { type: string, enum: [android, web, ios] }
+                fcm_token: { type: string }
+                app_version: { type: string }
+      responses: { '201': { description: سُجل الجهاز } }
+    delete:
+      tags: [me]
+      operationId: deleteDevice
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [fcm_token], properties: { fcm_token: { type: string } } }
+      responses: { '204': { description: حُذف } }
+  /me/deletion:
+    post:
+      tags: [me]
+      summary: طلب حذف الحساب — يبدأ فترة سماح 30 يومًا
+      operationId: requestDeletion
+      security: [{ bearerAuth: [] }]
+      responses: { '202': { description: مجدول للحذف } }
+    delete:
+      tags: [me]
+      summary: إلغاء طلب الحذف ضمن فترة السماح
+      operationId: cancelDeletion
+      security: [{ bearerAuth: [] }]
+      responses: { '204': { description: أُلغي } }
+  /me/exports:
+    post:
+      tags: [me]
+      summary: طلب تصدير بياناتي (تنفيذ عبر Queue)
+      operationId: requestExport
+      security: [{ bearerAuth: [] }]
+      responses: { '202': { description: في الطابور, content: { application/json: { schema: { $ref: '#/components/schemas/DataExport' } } } } }
+  /me/exports/{exportId}:
+    get:
+      tags: [me]
+      operationId: getExport
+      security: [{ bearerAuth: [] }]
+      parameters: [{ $ref: '#/components/parameters/IdPath' }]
+      responses:
+        '200': { description: الحالة + رابط تحميل موقّت عند الجاهزية, content: { application/json: { schema: { $ref: '#/components/schemas/DataExport' } } } }
+        '404': { $ref: '#/components/responses/Problem' }
+
+  /me/business:
+    get:
+      tags: [merchant]
+      operationId: getBusiness
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/BusinessProfile' } } } }
+        '404': { $ref: '#/components/responses/Problem' }
+    put:
+      tags: [merchant]
+      summary: تقديم/تحديث الملف التجاري — تحديث جوهري يعيد pending
+      operationId: putBusiness
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [store_name, governorate, city, public_phone, compliance_confirmed]
+              properties:
+                legal_name: { type: string }
+                store_name: { type: string, maxLength: 80 }
+                address: { type: string, maxLength: 200 }
+                governorate: { type: string }
+                city: { type: string }
+                public_phone: { type: string, maxLength: 20 }
+                public_email: { type: string, format: email }
+                register_number: { type: string, description: سجل تجاري اختياري }
+                compliance_confirmed: { type: boolean }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/BusinessProfile' } } } }
+        '422': { $ref: '#/components/responses/Problem' }
+  /me/business/status:
+    get:
+      tags: [merchant]
+      operationId: getBusinessStatus
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: حالة التحقق فقط
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, enum: [none, pending, verified, rejected, suspended] }
+                  review_note: { type: string, nullable: true }
+
+  /categories:
+    get:
+      tags: [catalog]
+      summary: شجرة التصنيفات النشطة
+      operationId: listCategories
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Category' } } } } }
+  /categories/{id}:
+    get:
+      tags: [catalog]
+      operationId: getCategory
+      parameters: [{ $ref: '#/components/parameters/IdPath' }]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Category' } } } }
+        '404': { $ref: '#/components/responses/Problem' }
+  /categories/{id}/attributes:
+    get:
+      tags: [catalog]
+      summary: خصائص التصنيف (موروثة من الأب) بقيمها
+      operationId: getCategoryAttributes
+      parameters: [{ $ref: '#/components/parameters/IdPath' }]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/CategoryAttribute' } } } } }
+  /locations:
+    get:
+      tags: [catalog]
+      summary: بحث المحافظات والمدن
+      operationId: searchLocations
+      parameters:
+        - { name: q, in: query, schema: { type: string } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Location' } } } } }
+
+  /listings:
+    get:
+      tags: [listings]
+      summary: بحث وفلاتر — مطابق لـFilterState في التطبيق
+      operationId: searchListings
+      parameters:
+        - { name: q, in: query, schema: { type: string, maxLength: 100 } }
+        - { name: category, in: query, schema: { $ref: '#/components/schemas/Ulid' } }
+        - { name: 'attributes[key]', in: query, style: deepObject, explode: true, schema: { type: object } }
+        - { name: price_min, in: query, schema: { type: integer, minimum: 0 } }
+        - { name: price_max, in: query, schema: { type: integer, minimum: 0 } }
+        - { name: currency, in: query, schema: { type: string, enum: [SYP, USD] } }
+        - { name: governorate, in: query, schema: { type: string } }
+        - { name: city, in: query, schema: { type: string } }
+        - { name: lat, in: query, schema: { type: number } }
+        - { name: lng, in: query, schema: { type: number } }
+        - { name: radius_km, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 15 } }
+        - { name: shipping, in: query, schema: { type: string, enum: [any, only], default: any } }
+        - { name: carrier, in: query, schema: { type: string } }
+        - { name: seller_type, in: query, schema: { type: string, enum: [any, private, commercial], default: any } }
+        - { name: offer_type, in: query, schema: { type: string, enum: [offer, wanted, any], default: any } }
+        - { name: sort, in: query, schema: { type: string, enum: [recommended, newest, price_asc, price_desc], default: recommended } }
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ListingPage' } } } }
+        '422': { $ref: '#/components/responses/Problem' }
+    post:
+      tags: [listings]
+      summary: إنشاء ونشر إعلان — Idempotency-Key إلزامي
+      operationId: createListing
+      security: [{ bearerAuth: [] }]
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ListingInput' }
+      responses:
+        '201': { description: منشور, content: { application/json: { schema: { $ref: '#/components/schemas/Listing' } } } }
+        '403': { $ref: '#/components/responses/Problem' }
+        '422': { $ref: '#/components/responses/Problem' }
+  /listings/{id}:
+    get:
+      tags: [listings]
+      operationId: getListing
+      parameters: [{ $ref: '#/components/parameters/IdPath' }]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Listing' } } } }
+        '404': { $ref: '#/components/responses/Problem' }
+        '410': { description: محذوف/محجوب — مثل «الإعلان غير متوفر», content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } } }
+    patch:
+      tags: [listings]
+      summary: تعديل — If-Match: <version>
+      operationId: updateListing
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/IdPath' }
+        - { name: If-Match, in: header, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/ListingInput' } } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Listing' } } } }
+        '403': { $ref: '#/components/responses/Problem' }
+        '409': { description: تعارض نسخة, content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } } }
+        '422': { $ref: '#/components/responses/Problem' }
+    delete:
+      tags: [listings]
+      operationId: deleteListing
+      security: [{ bearerAuth: [] }]
+      parameters: [{ $ref: '#/components/parameters/IdPath' }]
+      responses:
+        '204': { description: حُذف (ناعم) }
+        '403': { $ref: '#/components/responses/Problem' }
+  /listings/{id}/reserve:
+    post: { tags: [listings], operationId: reserveListing, security: [{ bearerAuth: [] }], parameters: [{ $ref: '#/components/parameters/IdPath' }], responses: { '200': { $ref: '#/components/responses/Listing' }, '409': { $ref: '#/components/responses/Problem' } } }
+  /listings/{id}/unreserve:
+    post: { tags: [listings], operationId: unreserveListing, security: [{ bearerAuth: [] }], parameters: [{ $ref: '#/components/parameters/IdPath' }], responses: { '200': { $ref: '#/components/responses/Listing' }, '409': { $ref: '#/components/responses/Problem' } } }
+  /listings/{id}/sell:
+    post: { tags: [listings], operationId: sellListing, security: [{ bearerAuth: [] }], parameters: [{ $ref: '#/components/parameters/IdPath' }], responses: { '200': { $ref: '#/components/responses/Listing' }, '409': { $ref: '#/components/responses/Problem' } } }
+  /listings/{id}/reactivate:
+    post: { tags: [listings], operationId: reactivateListing, security: [{ bearerAuth: [] }], parameters: [{ $ref: '#/components/parameters/IdPath' }], responses: { '200': { $ref: '#/components/responses/Listing' }, '409': { $ref: '#/components/responses/Problem' } } }
+  /listings/{id}/extend:
+    post: { tags: [listings], operationId: extendListing, security: [{ bearerAuth: [] }], parameters: [{ $ref: '#/components/parameters/IdPath' }], responses: { '200': { $ref: '#/components/responses/Listing' }, '409': { $ref: '#/components/responses/Problem' } } }
+  /listings/{id}/similar:
+    get:
+      tags: [listings]
+      operationId: similarListings
+      parameters: [{ $ref: '#/components/parameters/IdPath' }]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/ListingCard' } } } } }
+
+  /me/listings:
+    get:
+      tags: [listings]
+      summary: إعلاناتي بحسب الحالة
+      operationId: myListings
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: status, in: query, schema: { type: string, enum: [active, reserved, sold, expired, deleted, all], default: all } }
+        - { $ref: '#/components/parameters/Cursor' }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ListingPage' } } } }
+  /me/listings/stats:
+    get:
+      tags: [listings]
+      operationId: myListingStats
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: عدّادات مجمعة لكل حالة + مشاهدات
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  counts: { type: object, additionalProperties: { type: integer } }
+                  total_views: { type: integer }
+
+  /drafts:
+    get:
+      tags: [drafts]
+      operationId: listDrafts
+      security: [{ bearerAuth: [] }]
+      responses: { '200': { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Draft' } } } } } }
+    post:
+      tags: [drafts]
+      summary: حفظ مسودة (جديدة أو تعديل عبر listing_id)
+      operationId: saveDraft
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [payload]
+              properties:
+                listing_id: { $ref: '#/components/schemas/Ulid', nullable: true }
+                payload: { $ref: '#/components/schemas/ListingInput' }
+                media_ids: { type: array, items: { $ref: '#/components/schemas/Ulid' } }
+      responses:
+        '201': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Draft' } } } }
+        '422': { $ref: '#/components/responses/Problem' }
+  /drafts/{id}:
+    get:
+      tags: [drafts]
+      operationId: getDraft
+      security: [{ bearerAuth: [] }]
+      parameters: [{ $ref: '#/components/parameters/IdPath' }]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Draft' } } } }
+        '404': { $ref: '#/components/responses/Problem' }
+    put:
+      tags: [drafts]
+      operationId: updateDraft
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/IdPath' }
+        - { name: If-Match, in: header, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, properties: { payload: { $ref: '#/components/schemas/ListingInput' }, media_ids: { type: array, items: { $ref: '#/components/schemas/Ulid' } } } } } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Draft' } } } }
+        '409': { $ref: '#/components/responses/Problem' }
+    delete:
+      tags: [drafts]
+      operationId: deleteDraft
+      security: [{ bearerAuth: [] }]
+      parameters: [{ $ref: '#/components/parameters/IdPath' }]
+      responses: { '204': { description: حُذفت } }
+  /drafts/{id}/publish:
+    post:
+      tags: [drafts]
+      summary: نشر المسودة — تحقق كامل + Idempotency-Key
+      operationId: publishDraft
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/IdPath' }
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      responses:
+        '201': { description: نُشرت, content: { application/json: { schema: { $ref: '#/components/schemas/Listing' } } } }
+        '409': { $ref: '#/components/responses/Problem' }
+        '422': { $ref: '#/components/responses/Problem' }
+
+  /media:
+    post:
+      tags: [media]
+      summary: رفع صورة (multipart) — فحص نوع وأبعاد ثم معالجة Queue
+      operationId: uploadMedia
+      security: [{ bearerAuth: [] }]
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties: { file: { type: string, format: binary, description: JPEG/PNG/WebP ≤8MB ≤25MP } }
+      responses:
+        '202': { description: قُبلت وقيد المعالجة, content: { application/json: { schema: { $ref: '#/components/schemas/Media' } } } }
+        '422': { $ref: '#/components/responses/Problem' }
+  /media/{id}:
+    get:
+      tags: [media]
+      operationId: getMedia
+      security: [{ bearerAuth: [] }]
+      parameters: [{ $ref: '#/components/parameters/IdPath' }]
+      responses:
+        '200': { description: الحالة وvariants, content: { application/json: { schema: { $ref: '#/components/schemas/Media' } } } }
+        '404': { $ref: '#/components/responses/Problem' }
+    delete:
+      tags: [media]
+      operationId: deleteMedia
+      security: [{ bearerAuth: [] }]
+      parameters: [{ $ref: '#/components/parameters/IdPath' }]
+      responses: { '204': { description: حُذفت }, '409': { description: مرتبطة بإعلان, content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } } } }
+
+  /users/{id}:
+    get:
+      tags: [sellers]
+      summary: صفحة البائع — يتضمن شارة وبيانات الاتصال عند verified
+      operationId: getSeller
+      parameters: [{ $ref: '#/components/parameters/IdPath' }]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/PublicUser' } } } }
+        '404': { $ref: '#/components/responses/Problem' }
+  /users/{id}/listings:
+    get:
+      tags: [sellers]
+      operationId: sellerListings
+      parameters:
+        - { $ref: '#/components/parameters/IdPath' }
+        - { $ref: '#/components/parameters/Cursor' }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ListingPage' } } } }
+  /users/{id}/stats:
+    get:
+      tags: [sellers]
+      operationId: sellerStats
+      parameters: [{ $ref: '#/components/parameters/IdPath' }]
+      responses:
+        '200':
+          description: تاريخ الانضمام، عدد الإعلانات النشطة، معدل الرد
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  member_since: { type: string, format: date }
+                  active_listings: { type: integer }
+                  response_rate: { type: number, nullable: true }
+
+  /favorites:
+    get:
+      tags: [engagement]
+      operationId: listFavorites
+      security: [{ bearerAuth: [] }]
+      parameters: [{ $ref: '#/components/parameters/Cursor' }]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ListingPage' } } } }
+  /favorites/{listingId}:
+    put:
+      tags: [engagement]
+      operationId: addFavorite
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: listingId, in: path, required: true, schema: { $ref: '#/components/schemas/Ulid' } }]
+      responses: { '204': { description: أُضيفت (idempotent) } }
+    delete:
+      tags: [engagement]
+      operationId: removeFavorite
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: listingId, in: path, required: true, schema: { $ref: '#/components/schemas/Ulid' } }]
+      responses: { '204': { description: أُزيلت (idempotent) } }
+
+  /saved-searches:
+    get:
+      tags: [engagement]
+      operationId: listSavedSearches
+      security: [{ bearerAuth: [] }]
+      responses: { '200': { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/SavedSearch' } } } } } }
+    post:
+      tags: [engagement]
+      operationId: createSavedSearch
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [filters]
+              properties:
+                name: { type: string, maxLength: 60 }
+                query: { type: string }
+                filters: { type: object, description: نفس مخطط GET /listings }
+                alerts_enabled: { type: boolean, default: true }
+                alert_frequency: { type: string, enum: [instant, daily], default: instant }
+      responses:
+        '201': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/SavedSearch' } } } }
+        '422': { $ref: '#/components/responses/Problem' }
+  /saved-searches/{id}:
+    patch:
+      tags: [engagement]
+      operationId: updateSavedSearch
+      security: [{ bearerAuth: [] }]
+      parameters: [{ $ref: '#/components/parameters/IdPath' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, properties: { name: { type: string }, alerts_enabled: { type: boolean }, alert_frequency: { type: string, enum: [instant, daily] } } } } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/SavedSearch' } } } }
+    delete:
+      tags: [engagement]
+      operationId: deleteSavedSearch
+      security: [{ bearerAuth: [] }]
+      parameters: [{ $ref: '#/components/parameters/IdPath' }]
+      responses: { '204': { description: حُذف } }
+
+  /follows:
+    get:
+      tags: [engagement]
+      operationId: listFollows
+      security: [{ bearerAuth: [] }]
+      responses: { '200': { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/PublicUser' } } } } } }
+  /follows/{userId}:
+    put:
+      tags: [engagement]
+      operationId: follow
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: userId, in: path, required: true, schema: { $ref: '#/components/schemas/Ulid' } }]
+      responses: { '204': { description: متابعة (idempotent) }, '422': { description: لا يمكن متابعة نفسك, content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } } } }
+    delete:
+      tags: [engagement]
+      operationId: unfollow
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: userId, in: path, required: true, schema: { $ref: '#/components/schemas/Ulid' } }]
+      responses: { '204': { description: أُلغيت } }
+
+  /recently-viewed:
+    get:
+      tags: [engagement]
+      operationId: listRecentlyViewed
+      security: [{ bearerAuth: [] }]
+      responses: { '200': { description: آخر 30, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/ListingCard' } } } } } }
+    delete:
+      tags: [engagement]
+      operationId: clearRecentlyViewed
+      security: [{ bearerAuth: [] }]
+      responses: { '204': { description: مُسح } }
+
+  /conversations:
+    get:
+      tags: [messaging]
+      operationId: listConversations
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: archived, in: query, schema: { type: boolean, default: false } }
+        - { $ref: '#/components/parameters/Cursor' }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ConversationPage' } } } }
+    post:
+      tags: [messaging]
+      summary: بدء محادثة على إعلان — مرة واحدة لكل (إعلان، مشترٍ)
+      operationId: createConversation
+      security: [{ bearerAuth: [] }]
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [listing_id]
+              properties:
+                listing_id: { $ref: '#/components/schemas/Ulid' }
+                first_message: { type: string, maxLength: 2000 }
+      responses:
+        '201': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Conversation' } } } }
+        '403': { description: إعلانك أو حظر متبادل أو إعلان غير متاح, content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } } }
+        '404': { $ref: '#/components/responses/Problem' }
+        '429': { $ref: '#/components/responses/Problem' }
+  /conversations/{id}:
+    get:
+      tags: [messaging]
+      operationId: getConversation
+      security: [{ bearerAuth: [] }]
+      parameters: [{ $ref: '#/components/parameters/IdPath' }]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Conversation' } } } }
+        '404': { $ref: '#/components/responses/Problem' }
+    patch:
+      tags: [messaging]
+      summary: أرشفة/إلغاء أرشفة
+      operationId: patchConversation
+      security: [{ bearerAuth: [] }]
+      parameters: [{ $ref: '#/components/parameters/IdPath' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, properties: { archived: { type: boolean } } } } }
+      responses: { '200': { description: OK } }
+    delete:
+      tags: [messaging]
+      summary: حذف من جهتي فقط
+      operationId: deleteConversation
+      security: [{ bearerAuth: [] }]
+      parameters: [{ $ref: '#/components/parameters/IdPath' }]
+      responses: { '204': { description: حُذفت لديّ } }
+  /conversations/{id}/messages:
+    get:
+      tags: [messaging]
+      summary: صفحة رسائل للأعلى/الأسفل — Polling عبر after=
+      operationId: listMessages
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/IdPath' }
+        - { name: before, in: query, schema: { $ref: '#/components/schemas/Ulid' }, description: رسائل أقدم من }
+        - { name: after, in: query, schema: { $ref: '#/components/schemas/Ulid' }, description: رسائل أحدث من (polling) }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/MessagePage' } } } }
+    post:
+      tags: [messaging]
+      summary: إرسال رسالة — client_message_id يمنع التكرار
+      operationId: sendMessage
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/IdPath' }
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [body, client_message_id]
+              properties:
+                body: { type: string, maxLength: 2000 }
+                client_message_id: { $ref: '#/components/schemas/Ulid' }
+      responses:
+        '201': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Message' } } } }
+        '403': { $ref: '#/components/responses/Problem' }
+        '429': { $ref: '#/components/responses/Problem' }
+  /conversations/{id}/read:
+    post:
+      tags: [messaging]
+      operationId: markRead
+      security: [{ bearerAuth: [] }]
+      parameters: [{ $ref: '#/components/parameters/IdPath' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [last_read_message_id], properties: { last_read_message_id: { $ref: '#/components/schemas/Ulid' } } } } }
+      responses: { '204': { description: OK } }
+
+  /blocks:
+    get:
+      tags: [safety]
+      operationId: listBlocks
+      security: [{ bearerAuth: [] }]
+      responses: { '200': { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/PublicUser' } } } } } }
+  /blocks/{userId}:
+    put:
+      tags: [safety]
+      summary: حظر — يمنع المراسلة بالاتجاهين
+      operationId: blockUser
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: userId, in: path, required: true, schema: { $ref: '#/components/schemas/Ulid' } }]
+      responses: { '204': { description: محظور (idempotent) }, '422': { $ref: '#/components/responses/Problem' } }
+    delete:
+      tags: [safety]
+      operationId: unblockUser
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: userId, in: path, required: true, schema: { $ref: '#/components/schemas/Ulid' } }]
+      responses: { '204': { description: أُلغي } }
+  /reports:
+    post:
+      tags: [safety]
+      summary: بلاغ عن إعلان/مستخدم/رسالة — متاح للضيوف ببيانات اتصال
+      operationId: createReport
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [target_type, target_id, reason]
+              properties:
+                target_type: { type: string, enum: [listing, user, message] }
+                target_id: { $ref: '#/components/schemas/Ulid' }
+                reason: { type: string, enum: [fraud, illegal, prohibited_item, harassment, spam, ip_violation, other] }
+                details: { type: string, maxLength: 2000 }
+                reporter_contact: { type: string, description: بريد/هاتف للضيوف }
+                captcha_token: { type: string, description: للضيوف }
+      responses:
+        '202': { description: استُلم البلاغ }
+        '422': { $ref: '#/components/responses/Problem' }
+        '429': { $ref: '#/components/responses/Problem' }
+
+  /notifications:
+    get:
+      tags: [notifications]
+      operationId: listNotifications
+      security: [{ bearerAuth: [] }]
+      parameters: [{ $ref: '#/components/parameters/Cursor' }]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/NotificationPage' } } } }
+  /notifications/unread-count:
+    get:
+      tags: [notifications]
+      operationId: unreadCount
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: object, properties: { unread: { type: integer } } } } } }
+  /notifications/{id}/read:
+    post:
+      tags: [notifications]
+      operationId: readNotification
+      security: [{ bearerAuth: [] }]
+      parameters: [{ $ref: '#/components/parameters/IdPath' }]
+      responses: { '204': { description: OK } }
+  /notifications/read-all:
+    post:
+      tags: [notifications]
+      operationId: readAllNotifications
+      security: [{ bearerAuth: [] }]
+      responses: { '204': { description: OK } }
+  /notifications/{id}:
+    delete:
+      tags: [notifications]
+      operationId: deleteNotification
+      security: [{ bearerAuth: [] }]
+      parameters: [{ $ref: '#/components/parameters/IdPath' }]
+      responses: { '204': { description: OK } }
+
+components:
+  securitySchemes:
+    bearerAuth: { type: http, scheme: bearer, bearerFormat: token }
+  parameters:
+    IdPath: { name: id, in: path, required: true, schema: { $ref: '#/components/schemas/Ulid' } }
+    IdempotencyKey: { name: Idempotency-Key, in: header, required: true, schema: { type: string, maxLength: 128 } }
+    Cursor: { name: cursor, in: query, schema: { type: string } }
+    Limit: { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 50, default: 20 } }
+  responses:
+    Problem:
+      description: RFC 9457 Problem Details — title/detail عربيان، code ثابت للتطبيق
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    Listing:
+      description: إعلان
+      content: { application/json: { schema: { $ref: '#/components/schemas/Listing' } } }
+  schemas:
+    Ulid: { type: string, pattern: '^[0-9A-HJKMNP-TV-Z]{26}$' }
+    Problem:
+      type: object
+      properties:
+        type: { type: string, example: 'https://sooqna.example/problems/validation' }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+        code: { type: string, example: 'listing.not_owner', description: رمز ثابت يترجمه التطبيق }
+        errors: { type: object, additionalProperties: { type: array, items: { type: string } } }
+        instance: { type: string }
+    Health:
+      type: object
+      properties:
+        status: { type: string, enum: [ok, degraded] }
+        checks: { type: object, additionalProperties: { type: string } }
+    AuthSession:
+      type: object
+      properties:
+        token: { type: string }
+        user: { $ref: '#/components/schemas/User' }
+    User:
+      type: object
+      properties:
+        id: { $ref: '#/components/schemas/Ulid' }
+        email: { type: string, format: email }
+        display_name: { type: string }
+        account_type: { type: string, enum: [private, commercial] }
+        status: { type: string, enum: [active, suspended, pending_deletion] }
+        email_verified: { type: boolean }
+        default_location: { $ref: '#/components/schemas/Location', nullable: true }
+        business_status: { type: string, enum: [none, pending, verified, rejected, suspended] }
+        member_since: { type: string, format: date }
+    PublicUser:
+      type: object
+      properties:
+        id: { $ref: '#/components/schemas/Ulid' }
+        display_name: { type: string }
+        member_since: { type: string, format: date }
+        location: { type: string, nullable: true, description: 'مدينة فقط، مثل "حلب"' }
+        is_verified_business: { type: boolean }
+        business: { $ref: '#/components/schemas/BusinessPublic', nullable: true }
+        is_following: { type: boolean, description: عند وجود جلسة }
+    BusinessProfile:
+      type: object
+      properties:
+        legal_name: { type: string, nullable: true }
+        store_name: { type: string }
+        address: { type: string, nullable: true }
+        governorate: { type: string }
+        city: { type: string }
+        public_phone: { type: string }
+        public_email: { type: string, nullable: true }
+        register_number: { type: string, nullable: true }
+        status: { type: string, enum: [pending, verified, rejected, suspended] }
+        review_note: { type: string, nullable: true }
+        verified_at: { type: string, format: date-time, nullable: true }
+    BusinessPublic:
+      type: object
+      properties:
+        store_name: { type: string }
+        public_phone: { type: string }
+        public_email: { type: string, nullable: true }
+        governorate: { type: string }
+        city: { type: string }
+    Consent:
+      type: object
+      properties:
+        purpose: { type: string }
+        version: { type: string }
+        granted: { type: boolean }
+        at: { type: string, format: date-time }
+    NotificationPreference:
+      type: object
+      required: [type, channel, enabled]
+      properties:
+        type: { type: string, enum: [message, search_alert, listing_expiry, moderation, marketing] }
+        channel: { type: string, enum: [push, email, in_app] }
+        enabled: { type: boolean }
+    DataExport:
+      type: object
+      properties:
+        id: { $ref: '#/components/schemas/Ulid' }
+        status: { type: string, enum: [queued, ready, expired, failed] }
+        download_url: { type: string, nullable: true }
+        expires_at: { type: string, format: date-time, nullable: true }
+    Category:
+      type: object
+      properties:
+        id: { $ref: '#/components/schemas/Ulid' }
+        slug: { type: string }
+        name: { type: string, description: الاسم العربي }
+        icon: { type: string, nullable: true }
+        allows_shipping: { type: boolean }
+        allows_wanted: { type: boolean }
+        children: { type: array, items: { $ref: '#/components/schemas/Category' } }
+    CategoryAttribute:
+      type: object
+      properties:
+        key: { type: string }
+        label: { type: string }
+        data_type: { type: string, enum: [enum, int, decimal, bool, text] }
+        is_required: { type: boolean }
+        is_filterable: { type: boolean }
+        options: { type: array, items: { type: object, properties: { id: { $ref: '#/components/schemas/Ulid' }, value: { type: string }, label: { type: string } } } }
+    Location:
+      type: object
+      properties:
+        id: { $ref: '#/components/schemas/Ulid' }
+        governorate: { type: string }
+        city: { type: string }
+        district: { type: string, nullable: true }
+    ListingInput:
+      type: object
+      required: [category_id, offer_type, title, description, price_type, location_id]
+      properties:
+        category_id: { $ref: '#/components/schemas/Ulid' }
+        offer_type: { type: string, enum: [offer, wanted] }
+        title: { type: string, maxLength: 70 }
+        description: { type: string, maxLength: 4000 }
+        price_cents: { type: integer, nullable: true }
+        currency: { type: string, enum: [SYP, USD], default: SYP }
+        price_type: { type: string, enum: [fixed, negotiable, free] }
+        location_id: { $ref: '#/components/schemas/Ulid' }
+        lat: { type: number, nullable: true, description: اختياري؛ يُقرّب ~1 كم قبل التخزين }
+        lng: { type: number, nullable: true }
+        shipping_available: { type: boolean, default: false }
+        carrier: { type: string, nullable: true }
+        attributes: { type: object, additionalProperties: { type: string }, description: 'مثل {"type":"city_bike","condition":"used"}' }
+        media_ids: { type: array, maxItems: 10, items: { $ref: '#/components/schemas/Ulid' }, description: بالترتيب؛ أول عنصر = الغلاف ما لم يُحدد }
+        cover_media_id: { $ref: '#/components/schemas/Ulid', nullable: true }
+    Listing:
+      allOf:
+        - $ref: '#/components/schemas/ListingCard'
+        - type: object
+          properties:
+            description: { type: string }
+            images: { type: array, items: { $ref: '#/components/schemas/Media' } }
+            attributes: { type: object, additionalProperties: { type: string } }
+            shipping_available: { type: boolean }
+            carrier: { type: string, nullable: true }
+            location: { $ref: '#/components/schemas/Location' }
+            seller: { $ref: '#/components/schemas/PublicUser' }
+            status: { type: string, enum: [active, reserved, sold, expired, blocked, deleted] }
+            version: { type: integer }
+            views_count: { type: integer }
+            favorites_count: { type: integer }
+            is_favorite: { type: boolean, description: عند وجود جلسة }
+            is_own: { type: boolean, description: عند وجود جلسة }
+            published_at: { type: string, format: date-time }
+            expires_at: { type: string, format: date-time }
+    ListingCard:
+      type: object
+      properties:
+        id: { $ref: '#/components/schemas/Ulid' }
+        title: { type: string }
+        price_cents: { type: integer, nullable: true }
+        currency: { type: string, enum: [SYP, USD] }
+        price_type: { type: string, enum: [fixed, negotiable, free] }
+        offer_type: { type: string, enum: [offer, wanted] }
+        status: { type: string }
+        cover_url: { type: string, nullable: true }
+        location_label: { type: string, description: 'مثل "حلب — الجميلية"' }
+        published_at: { type: string, format: date-time }
+        is_verified_business: { type: boolean }
+    ListingPage:
+      type: object
+      properties:
+        data: { type: array, items: { $ref: '#/components/schemas/ListingCard' } }
+        next_cursor: { type: string, nullable: true }
+    Draft:
+      type: object
+      properties:
+        id: { $ref: '#/components/schemas/Ulid' }
+        listing_id: { $ref: '#/components/schemas/Ulid', nullable: true }
+        payload: { $ref: '#/components/schemas/ListingInput' }
+        media_ids: { type: array, items: { $ref: '#/components/schemas/Ulid' } }
+        version: { type: integer }
+        updated_at: { type: string, format: date-time }
+    Media:
+      type: object
+      properties:
+        id: { $ref: '#/components/schemas/Ulid' }
+        status: { type: string, enum: [uploaded, processing, ready, rejected] }
+        variants: { type: object, properties: { thumb: { type: string }, card: { type: string }, full: { type: string } } }
+        width: { type: integer }
+        height: { type: integer }
+    SavedSearch:
+      type: object
+      properties:
+        id: { $ref: '#/components/schemas/Ulid' }
+        name: { type: string }
+        query: { type: string, nullable: true }
+        filters: { type: object }
+        alerts_enabled: { type: boolean }
+        alert_frequency: { type: string, enum: [instant, daily] }
+        last_alerted_at: { type: string, format: date-time, nullable: true }
+    Conversation:
+      type: object
+      properties:
+        id: { $ref: '#/components/schemas/Ulid' }
+        listing: { $ref: '#/components/schemas/ListingCard' }
+        participant: { $ref: '#/components/schemas/PublicUser' }
+        last_message: { $ref: '#/components/schemas/Message', nullable: true }
+        unread_count: { type: integer }
+        archived: { type: boolean }
+        updated_at: { type: string, format: date-time }
+    ConversationPage:
+      type: object
+      properties:
+        data: { type: array, items: { $ref: '#/components/schemas/Conversation' } }
+        next_cursor: { type: string, nullable: true }
+    Message:
+      type: object
+      properties:
+        id: { $ref: '#/components/schemas/Ulid' }
+        client_message_id: { $ref: '#/components/schemas/Ulid' }
+        sender_id: { $ref: '#/components/schemas/Ulid' }
+        body: { type: string }
+        created_at: { type: string, format: date-time }
+        is_mine: { type: boolean }
+    MessagePage:
+      type: object
+      properties:
+        data: { type: array, items: { $ref: '#/components/schemas/Message' } }
+        next_cursor: { type: string, nullable: true }
+    NotificationPage:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string }
+              type: { type: string }
+              data: { type: object }
+              read_at: { type: string, format: date-time, nullable: true }
+              created_at: { type: string, format: date-time }
+        next_cursor: { type: string, nullable: true }
+security: []

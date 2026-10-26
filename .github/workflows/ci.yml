@@ -1,0 +1,73 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: mbstring, pgsql, pdo_pgsql, redis, intl, zip
+          coverage: none
+      - uses: actions/cache@v4
+        with:
+          path: vendor
+          key: composer-${{ hashFiles('composer.lock') }}
+          restore-keys: composer-
+      - run: composer install --no-interaction --prefer-dist
+      - name: OpenAPI YAML structure
+        run: php -r 'require "vendor/autoload.php"; $d = Symfony\Component\Yaml\Yaml::parseFile("docs/api/openapi.yaml"); assert($d["openapi"] === "3.1.0"); assert(isset($d["paths"], $d["components"]["schemas"])); echo "openapi ok\n";'
+      - run: vendor/bin/pint --test
+      - run: vendor/bin/phpstan analyse --no-progress
+
+  tests:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: sooqna_test
+          POSTGRES_USER: sooqna
+          POSTGRES_PASSWORD: sooqna_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U sooqna -d sooqna_test"
+          --health-interval 5s --health-timeout 3s --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 3s --health-retries 10
+    env:
+      DB_CONNECTION: pgsql
+      DB_HOST: 127.0.0.1
+      DB_PORT: 5432
+      DB_DATABASE: sooqna_test
+      DB_USERNAME: sooqna
+      DB_PASSWORD: sooqna_test
+      REDIS_HOST: 127.0.0.1
+      CACHE_STORE: redis
+      QUEUE_CONNECTION: redis
+      FILESYSTEM_DISK: local
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: mbstring, pgsql, pdo_pgsql, redis, intl, zip
+          coverage: none
+      - uses: actions/cache@v4
+        with:
+          path: vendor
+          key: composer-${{ hashFiles('composer.lock') }}
+          restore-keys: composer-
+      - run: composer install --no-interaction --prefer-dist
+      - run: cp .env.example .env && php artisan key:generate
+      - run: php artisan migrate --force
+      - run: php artisan test
