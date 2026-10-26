@@ -1,5 +1,7 @@
 <?php
 
+use App\Modules\Catalog\Http\Controllers\CategoryController;
+use App\Modules\Catalog\Http\Controllers\LocationController;
 use App\Modules\Identity\Http\Controllers\AuthController;
 use App\Modules\Identity\Http\Controllers\BusinessController;
 use App\Modules\Identity\Http\Controllers\ConsentController;
@@ -89,4 +91,9 @@ Route::prefix('v1')->group(function (): void {
         Route::put('me/business', [BusinessController::class, 'update']);
         Route::get('me/business/status', [BusinessController::class, 'status']);
     });
+
+    // ── Catalog (عامة، بدون مصادقة) ────────────────────────────────────
+    Route::get('categories', [CategoryController::class, 'index']);
+    Route::get('categories/{id}', [CategoryController::class, 'show'])->where('id', '[0-9a-hjkmnp-tv-z]{26}');
+    Route::get('locations', [LocationController::class, 'index']);
 });
