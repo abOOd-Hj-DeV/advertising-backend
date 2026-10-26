@@ -1,5 +1,12 @@
 <?php
 
+use App\Modules\Identity\Http\Controllers\AuthController;
+use App\Modules\Identity\Http\Controllers\BusinessController;
+use App\Modules\Identity\Http\Controllers\ConsentController;
+use App\Modules\Identity\Http\Controllers\DeviceController;
+use App\Modules\Identity\Http\Controllers\EmailVerificationController;
+use App\Modules\Identity\Http\Controllers\MeController;
+use App\Modules\Identity\Http\Controllers\NotificationPreferenceController;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -42,5 +49,44 @@ Route::prefix('v1')->group(function (): void {
             'status' => $healthy ? 'ok' : 'degraded',
             'checks' => $checks,
         ], $healthy ? 200 : 503);
+    });
+
+    // ── Auth ──────────────────────────────────────────────────────────
+    Route::prefix('auth')->group(function (): void {
+        Route::post('register', [AuthController::class, 'register'])->middleware('throttle:5,1');
+        Route::post('login', [AuthController::class, 'login'])->middleware('throttle:5,1');
+        Route::post('password/forgot', [AuthController::class, 'forgotPassword'])->middleware('throttle:5,60');
+        Route::post('password/reset', [AuthController::class, 'resetPassword'])->middleware('throttle:5,60');
+        Route::post('email/verify', [EmailVerificationController::class, 'verify'])->middleware('throttle:10,1');
+
+        Route::middleware('auth:sanctum')->group(function (): void {
+            Route::post('logout', [AuthController::class, 'logout']);
+            Route::post('logout-all', [AuthController::class, 'logoutAll']);
+            Route::post('email/resend', [EmailVerificationController::class, 'resend'])->middleware('throttle:3,60');
+            Route::put('password', [AuthController::class, 'changePassword']);
+        });
+    });
+
+    // ── Me ────────────────────────────────────────────────────────────
+    Route::middleware('auth:sanctum')->group(function (): void {
+        Route::get('me', [MeController::class, 'show']);
+        Route::patch('me', [MeController::class, 'update']);
+
+        Route::get('me/notification-preferences', [NotificationPreferenceController::class, 'index']);
+        Route::put('me/notification-preferences', [NotificationPreferenceController::class, 'update']);
+
+        Route::get('me/consents', [ConsentController::class, 'index']);
+        Route::post('me/consents', [ConsentController::class, 'store']);
+
+        Route::post('me/devices', [DeviceController::class, 'store']);
+        Route::delete('me/devices', [DeviceController::class, 'destroy']);
+
+        Route::post('me/deletion', [MeController::class, 'requestDeletion']);
+        Route::delete('me/deletion', [MeController::class, 'cancelDeletion']);
+
+        // ── Merchant ─────────────────────────────────────────────────
+        Route::get('me/business', [BusinessController::class, 'show']);
+        Route::put('me/business', [BusinessController::class, 'update']);
+        Route::get('me/business/status', [BusinessController::class, 'status']);
     });
 });

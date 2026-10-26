@@ -94,13 +94,16 @@ final class ProblemDetails
                 'لا تملك صلاحية تنفيذ هذا الإجراء.',
                 null,
             ],
-            $e instanceof ModelNotFoundException => [
-                Response::HTTP_NOT_FOUND,
-                'resource.not_found',
-                'غير موجود',
-                'المورد المطلوب غير موجود أو حُذف.',
-                null,
-            ],
+            // Laravel يحوّل ModelNotFoundException إلى NotFoundHttpException
+            // قبل renderer — نكشف الاستثناء الأصلي عبر getPrevious().
+            $e instanceof ModelNotFoundException
+                || $e->getPrevious() instanceof ModelNotFoundException => [
+                    Response::HTTP_NOT_FOUND,
+                    'resource.not_found',
+                    'غير موجود',
+                    'المورد المطلوب غير موجود أو حُذف.',
+                    null,
+                ],
             $e instanceof UniqueConstraintViolationException => [
                 Response::HTTP_CONFLICT,
                 'resource.conflict',
