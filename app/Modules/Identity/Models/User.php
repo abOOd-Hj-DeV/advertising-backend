@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Modules\Identity\Models;
 
 use Database\Factories\UserFactory;
+use Filament\Models\Contracts\FilamentUser;
+use Filament\Panel;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -32,7 +34,7 @@ use Laravel\Sanctum\HasApiTokens;
  * @property Carbon|null $deleted_at
  * @property-read BusinessProfile|null $businessProfile
  */
-class User extends Authenticatable
+class User extends Authenticatable implements FilamentUser
 {
     use HasApiTokens, HasFactory, HasUlids, Notifiable, SoftDeletes;
 
@@ -118,5 +120,12 @@ class User extends Authenticatable
     public function deletionRequests(): HasMany
     {
         return $this->hasMany(AccountDeletionRequest::class);
+    }
+
+    /** وصول لوحة الإشراف: المشرف والإدارة فقط */
+    public function canAccessPanel(Panel $panel): bool
+    {
+        return in_array($this->role, ['moderator', 'admin'], true)
+            && $this->status === 'active';
     }
 }
