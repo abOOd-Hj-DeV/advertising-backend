@@ -95,6 +95,10 @@ class ConversationController extends Controller
                     ->where('user_id', $buyer->id)
                     ->update(['deleted_at' => null, 'archived_at' => null]);
 
+                if (! empty($data['first_message'])) {
+                    MessageController::append($existing, $buyer, $data['first_message'], (string) Str::ulid());
+                }
+
                 return $existing;
             }
 

@@ -60,7 +60,7 @@ class MessageController extends Controller
         $conversation = $this->findParticipant($request, $id);
         $data = $request->validate([
             'body' => ['required', 'string', 'min:1', 'max:'.Message::BODY_MAX],
-            'client_message_id' => ['required', 'string', 'size:26'],
+            'client_message_id' => ['required', 'string', 'min:1', 'max:26'],
         ]);
 
         $sender = $request->user();
