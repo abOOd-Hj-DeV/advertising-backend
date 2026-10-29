@@ -12,7 +12,7 @@ return new class extends Migration
     {
         Schema::create('categories', function (Blueprint $table): void {
             $table->ulid('id')->primary();
-            $table->foreignUlid('parent_id')->nullable()->constrained('categories')->nullOnDelete();
+            $table->foreignUlid('parent_id')->nullable();
             $table->string('slug')->unique();
             $table->string('name_ar', 80);
             $table->string('icon', 60)->nullable();
@@ -22,6 +22,12 @@ return new class extends Migration
             $table->boolean('allows_wanted')->default(true);
             $table->timestamps();
             $table->index(['parent_id', 'is_active']);
+        });
+
+        // Self-referencing FK must be added after the PK exists: on Postgres a
+        // fluent constrained() runs before the implied primary-key command.
+        Schema::table('categories', function (Blueprint $table): void {
+            $table->foreign('parent_id')->references('id')->on('categories')->nullOnDelete();
         });
 
         Schema::create('category_attributes', function (Blueprint $table): void {
