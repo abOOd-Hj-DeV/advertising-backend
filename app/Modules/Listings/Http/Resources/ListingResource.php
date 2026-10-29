@@ -13,7 +13,7 @@ class ListingResource extends JsonResource
 {
     public function toArray(Request $request): array
     {
-        $user = $request->user();
+        $user = $request->user('sanctum');
         $card = (new ListingCardResource($this->resource))->toArray($request);
 
         return $card + [

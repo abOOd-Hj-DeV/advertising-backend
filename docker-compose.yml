@@ -8,7 +8,7 @@ services:
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
-      minio: { condition: service_started }
+      minio-init: { condition: service_completed_successfully }
     env_file: .env
 
   nginx:
@@ -84,6 +84,18 @@ services:
       - "9001:9001"
     volumes:
       - miniodata:/data
+
+  minio-init:
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile
+    volumes:
+      - .:/var/www/html
+    command: sh -c 'for i in $$(seq 1 30); do php artisan media:ensure-bucket && exit 0; sleep 2; done; exit 1'
+    depends_on:
+      minio: { condition: service_started }
+    env_file: .env
+    restart: "no"
 
   mailpit:
     image: axllent/mailpit:latest

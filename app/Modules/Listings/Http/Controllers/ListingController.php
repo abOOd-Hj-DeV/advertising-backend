@@ -36,7 +36,8 @@ class ListingController extends Controller
             throw new ModelNotFoundException;
         }
 
-        $isOwner = $request->user() && $listing->isOwnedBy($request->user());
+        $viewer = $request->user('sanctum');
+        $isOwner = $viewer !== null && $listing->isOwnedBy($viewer);
 
         if ($listing->trashed() || $listing->status === Listing::STATUS_DELETED) {
             if (! $isOwner) {
@@ -52,12 +53,12 @@ class ListingController extends Controller
             $listing->views_count++;
         }
 
-        if ($request->user()) {
+        if ($viewer) {
             $listing->setAttribute('is_favorite', Favorite::query()
-                ->where('user_id', $request->user()->id)
+                ->where('user_id', $viewer->id)
                 ->where('listing_id', $listing->id)
                 ->exists());
-            RecentlyViewedController::record($request->user()->id, $listing->id);
+            RecentlyViewedController::record($viewer->id, $listing->id);
         }
 
         return (new ListingResource($listing))->response();

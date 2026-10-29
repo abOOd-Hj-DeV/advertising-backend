@@ -23,9 +23,10 @@ class SellerController extends Controller
             throw new ModelNotFoundException;
         }
 
-        $isFollowing = $request->user() !== null
+        $viewer = $request->user('sanctum');
+        $isFollowing = $viewer !== null
             && Follow::query()
-                ->where('follower_id', $request->user()->id)
+                ->where('follower_id', $viewer->id)
                 ->where('seller_id', $user->id)
                 ->exists();
 
