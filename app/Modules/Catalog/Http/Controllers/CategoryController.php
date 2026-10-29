@@ -40,7 +40,7 @@ class CategoryController extends Controller
             throw new ModelNotFoundException;
         }
 
-        $inherited = $category->parent?->attributes ?? collect();
+        $inherited = $category->parent_id ? $category->parent->attributes : collect();
 
         return new JsonResponse(['data' => [
             ...self::node($category),

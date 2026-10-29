@@ -9,7 +9,13 @@ use App\Modules\Identity\Http\Controllers\DeviceController;
 use App\Modules\Identity\Http\Controllers\EmailVerificationController;
 use App\Modules\Identity\Http\Controllers\MeController;
 use App\Modules\Identity\Http\Controllers\NotificationPreferenceController;
+use App\Modules\Listings\Http\Controllers\DraftController;
+use App\Modules\Listings\Http\Controllers\ListingController;
+use App\Modules\Listings\Http\Controllers\ListingSearchController;
+use App\Modules\Listings\Http\Controllers\MediaController;
+use App\Modules\Listings\Http\Controllers\MyListingsController;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
@@ -96,4 +102,37 @@ Route::prefix('v1')->group(function (): void {
     Route::get('categories', [CategoryController::class, 'index']);
     Route::get('categories/{id}', [CategoryController::class, 'show'])->where('id', '[0-9a-hjkmnp-tv-z]{26}');
     Route::get('locations', [LocationController::class, 'index']);
+
+    // ── Listings ───────────────────────────────────────────────────────
+    Route::get('listings', [ListingSearchController::class, 'search']);
+    Route::get('listings/{id}', [ListingController::class, 'show'])->where('id', '[0-9a-hjkmnp-tv-z]{26}');
+    Route::get('listings/{id}/similar', [ListingController::class, 'similar'])->where('id', '[0-9a-hjkmnp-tv-z]{26}');
+
+    Route::middleware('auth:sanctum')->group(function (): void {
+        Route::post('listings', [ListingController::class, 'store'])->middleware('idempotency');
+        Route::patch('listings/{id}', [ListingController::class, 'update'])->where('id', '[0-9a-hjkmnp-tv-z]{26}');
+        Route::delete('listings/{id}', [ListingController::class, 'destroy'])->where('id', '[0-9a-hjkmnp-tv-z]{26}');
+
+        Route::post('listings/{id}/reserve', fn (Request $r, string $id) => app(ListingController::class)->transition($r, $id, 'reserve'))->where('id', '[0-9a-hjkmnp-tv-z]{26}');
+        Route::post('listings/{id}/unreserve', fn (Request $r, string $id) => app(ListingController::class)->transition($r, $id, 'unreserve'))->where('id', '[0-9a-hjkmnp-tv-z]{26}');
+        Route::post('listings/{id}/sell', fn (Request $r, string $id) => app(ListingController::class)->transition($r, $id, 'sell'))->where('id', '[0-9a-hjkmnp-tv-z]{26}');
+        Route::post('listings/{id}/reactivate', fn (Request $r, string $id) => app(ListingController::class)->transition($r, $id, 'reactivate'))->where('id', '[0-9a-hjkmnp-tv-z]{26}');
+        Route::post('listings/{id}/extend', [ListingController::class, 'extend'])->where('id', '[0-9a-hjkmnp-tv-z]{26}');
+
+        Route::get('me/listings', [MyListingsController::class, 'index']);
+        Route::get('me/listings/stats', [MyListingsController::class, 'stats']);
+
+        // ── Drafts ────────────────────────────────────────────────────
+        Route::get('drafts', [DraftController::class, 'index']);
+        Route::post('drafts', [DraftController::class, 'store']);
+        Route::get('drafts/{id}', [DraftController::class, 'show'])->where('id', '[0-9a-hjkmnp-tv-z]{26}');
+        Route::put('drafts/{id}', [DraftController::class, 'update'])->where('id', '[0-9a-hjkmnp-tv-z]{26}');
+        Route::delete('drafts/{id}', [DraftController::class, 'destroy'])->where('id', '[0-9a-hjkmnp-tv-z]{26}');
+        Route::post('drafts/{id}/publish', [DraftController::class, 'publish'])->middleware('idempotency')->where('id', '[0-9a-hjkmnp-tv-z]{26}');
+
+        // ── Media ─────────────────────────────────────────────────────
+        Route::post('media', [MediaController::class, 'store'])->middleware('idempotency');
+        Route::get('media/{id}', [MediaController::class, 'show'])->where('id', '[0-9a-hjkmnp-tv-z]{26}');
+        Route::delete('media/{id}', [MediaController::class, 'destroy'])->where('id', '[0-9a-hjkmnp-tv-z]{26}');
+    });
 });
