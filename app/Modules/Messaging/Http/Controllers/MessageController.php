@@ -13,6 +13,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
 class MessageController extends Controller
@@ -106,6 +107,25 @@ class MessageController extends Controller
             ->where('user_id', '!=', $sender->id)
             ->whereNotNull('deleted_at')
             ->update(['deleted_at' => null]);
+
+        // سجل إشعار داخل التطبيق للطرف الآخر (يظهر في /notifications)
+        $recipient = $conversation->participants()
+            ->where('user_id', '!=', $sender->id)->first();
+        if ($recipient) {
+            DB::table('notifications')->insert([
+                'id' => (string) Str::uuid(),
+                'type' => 'new_message',
+                'notifiable_id' => $recipient->user_id,
+                'notifiable_type' => User::class,
+                'data' => json_encode([
+                    'conversation_id' => $conversation->id,
+                    'sender' => $sender->display_name,
+                    'preview' => Str::limit($body, 80),
+                ]),
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        }
 
         return $message;
     }

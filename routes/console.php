@@ -1,5 +1,6 @@
 <?php
 
+use App\Modules\Engagement\Console\MatchSavedSearches;
 use App\Modules\Listings\Console\ExpireListings;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
@@ -10,3 +11,4 @@ Artisan::command('inspire', function () {
 })->purpose('Display an inspiring quote');
 
 Schedule::command(ExpireListings::class)->hourly()->withoutOverlapping();
+Schedule::command(MatchSavedSearches::class)->hourly()->withoutOverlapping();
