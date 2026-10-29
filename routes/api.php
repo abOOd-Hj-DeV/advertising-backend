@@ -21,7 +21,9 @@ use App\Modules\Listings\Http\Controllers\MediaController;
 use App\Modules\Listings\Http\Controllers\MyListingsController;
 use App\Modules\Messaging\Http\Controllers\ConversationController;
 use App\Modules\Messaging\Http\Controllers\MessageController;
+use App\Modules\Notifications\Http\Controllers\NotificationController;
 use App\Modules\Safety\Http\Controllers\BlockController;
+use App\Modules\Safety\Http\Controllers\ReportController;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -174,7 +176,17 @@ Route::prefix('v1')->group(function (): void {
         Route::get('blocks', [BlockController::class, 'index']);
         Route::put('blocks/{userId}', [BlockController::class, 'store'])->where('userId', '[0-9a-hjkmnp-tv-z]{26}');
         Route::delete('blocks/{userId}', [BlockController::class, 'destroy'])->where('userId', '[0-9a-hjkmnp-tv-z]{26}');
+
+        // ── Notifications ─────────────────────────────────────────────
+        Route::get('notifications', [NotificationController::class, 'index']);
+        Route::get('notifications/unread-count', [NotificationController::class, 'unreadCount']);
+        Route::post('notifications/{id}/read', [NotificationController::class, 'markRead']);
+        Route::post('notifications/read-all', [NotificationController::class, 'markAllRead']);
+        Route::delete('notifications/{id}', [NotificationController::class, 'destroy']);
     });
+
+    // بلاغات — متاحة للضيوف بوسيلة تواصل
+    Route::post('reports', [ReportController::class, 'store']);
 
     // ── صفحات البائعين العامة ─────────────────────────────────────────
     Route::get('users/{id}', [SellerController::class, 'show'])->where('id', '[0-9a-hjkmnp-tv-z]{26}');
