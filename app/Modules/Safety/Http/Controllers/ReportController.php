@@ -24,7 +24,7 @@ class ReportController extends Controller
             'captcha_token' => ['nullable', 'string'],
         ]);
 
-        $user = $request->user();
+        $user = $request->user('sanctum');
         if (! $user && empty($data['reporter_contact'])) {
             throw ValidationException::withMessages([
                 'reporter_contact' => ['مطلوب وسيلة تواصل للبلاغات من غير الحسابات.'],
