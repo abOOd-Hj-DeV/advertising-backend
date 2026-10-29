@@ -44,7 +44,7 @@ if (! function_exists('readyCheck')) {
     }
 }
 
-Route::prefix('v1')->group(function (): void {
+Route::prefix('v1')->middleware('throttle:api')->group(function (): void {
     // Liveness: لا يفحص التبعيات — يجب أن يرد حتى لو قاعدة البيانات ساقطة.
     Route::get('/health', fn () => new JsonResponse(['status' => 'ok']));
 
@@ -119,7 +119,7 @@ Route::prefix('v1')->group(function (): void {
     Route::get('listings/{id}/similar', [ListingController::class, 'similar'])->where('id', '[0-9a-hjkmnp-tv-z]{26}');
 
     Route::middleware('auth:sanctum')->group(function (): void {
-        Route::post('listings', [ListingController::class, 'store'])->middleware('idempotency');
+        Route::post('listings', [ListingController::class, 'store'])->middleware(['idempotency', 'throttle:api-writes']);
         Route::patch('listings/{id}', [ListingController::class, 'update'])->where('id', '[0-9a-hjkmnp-tv-z]{26}');
         Route::delete('listings/{id}', [ListingController::class, 'destroy'])->where('id', '[0-9a-hjkmnp-tv-z]{26}');
 
@@ -141,7 +141,7 @@ Route::prefix('v1')->group(function (): void {
         Route::post('drafts/{id}/publish', [DraftController::class, 'publish'])->middleware('idempotency')->where('id', '[0-9a-hjkmnp-tv-z]{26}');
 
         // ── Media ─────────────────────────────────────────────────────
-        Route::post('media', [MediaController::class, 'store'])->middleware('idempotency');
+        Route::post('media', [MediaController::class, 'store'])->middleware(['idempotency', 'throttle:api-writes']);
         Route::get('media/{id}', [MediaController::class, 'show'])->where('id', '[0-9a-hjkmnp-tv-z]{26}');
         Route::delete('media/{id}', [MediaController::class, 'destroy'])->where('id', '[0-9a-hjkmnp-tv-z]{26}');
 
@@ -164,12 +164,12 @@ Route::prefix('v1')->group(function (): void {
 
         // ── Messaging ─────────────────────────────────────────────────
         Route::get('conversations', [ConversationController::class, 'index']);
-        Route::post('conversations', [ConversationController::class, 'store'])->middleware('idempotency');
+        Route::post('conversations', [ConversationController::class, 'store'])->middleware(['idempotency', 'throttle:api-writes']);
         Route::get('conversations/{id}', [ConversationController::class, 'show'])->where('id', '[0-9a-hjkmnp-tv-z]{26}');
         Route::patch('conversations/{id}', [ConversationController::class, 'update'])->where('id', '[0-9a-hjkmnp-tv-z]{26}');
         Route::delete('conversations/{id}', [ConversationController::class, 'destroy'])->where('id', '[0-9a-hjkmnp-tv-z]{26}');
         Route::get('conversations/{id}/messages', [MessageController::class, 'index'])->where('id', '[0-9a-hjkmnp-tv-z]{26}');
-        Route::post('conversations/{id}/messages', [MessageController::class, 'store'])->middleware('idempotency')->where('id', '[0-9a-hjkmnp-tv-z]{26}');
+        Route::post('conversations/{id}/messages', [MessageController::class, 'store'])->middleware(['idempotency', 'throttle:api-writes'])->where('id', '[0-9a-hjkmnp-tv-z]{26}');
         Route::post('conversations/{id}/read', [ConversationController::class, 'markRead'])->where('id', '[0-9a-hjkmnp-tv-z]{26}');
 
         // ── Safety ────────────────────────────────────────────────────
@@ -186,7 +186,7 @@ Route::prefix('v1')->group(function (): void {
     });
 
     // بلاغات — متاحة للضيوف بوسيلة تواصل
-    Route::post('reports', [ReportController::class, 'store']);
+    Route::post('reports', [ReportController::class, 'store'])->middleware('throttle:api-writes');
 
     // ── صفحات البائعين العامة ─────────────────────────────────────────
     Route::get('users/{id}', [SellerController::class, 'show'])->where('id', '[0-9a-hjkmnp-tv-z]{26}');
