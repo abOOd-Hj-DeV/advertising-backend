@@ -2,6 +2,11 @@
 
 use App\Modules\Catalog\Http\Controllers\CategoryController;
 use App\Modules\Catalog\Http\Controllers\LocationController;
+use App\Modules\Engagement\Http\Controllers\FavoriteController;
+use App\Modules\Engagement\Http\Controllers\FollowController;
+use App\Modules\Engagement\Http\Controllers\RecentlyViewedController;
+use App\Modules\Engagement\Http\Controllers\SavedSearchController;
+use App\Modules\Engagement\Http\Controllers\SellerController;
 use App\Modules\Identity\Http\Controllers\AuthController;
 use App\Modules\Identity\Http\Controllers\BusinessController;
 use App\Modules\Identity\Http\Controllers\ConsentController;
@@ -134,5 +139,27 @@ Route::prefix('v1')->group(function (): void {
         Route::post('media', [MediaController::class, 'store'])->middleware('idempotency');
         Route::get('media/{id}', [MediaController::class, 'show'])->where('id', '[0-9a-hjkmnp-tv-z]{26}');
         Route::delete('media/{id}', [MediaController::class, 'destroy'])->where('id', '[0-9a-hjkmnp-tv-z]{26}');
+
+        // ── Engagement ────────────────────────────────────────────────
+        Route::get('favorites', [FavoriteController::class, 'index']);
+        Route::put('favorites/{listingId}', [FavoriteController::class, 'store'])->where('listingId', '[0-9a-hjkmnp-tv-z]{26}');
+        Route::delete('favorites/{listingId}', [FavoriteController::class, 'destroy'])->where('listingId', '[0-9a-hjkmnp-tv-z]{26}');
+
+        Route::get('saved-searches', [SavedSearchController::class, 'index']);
+        Route::post('saved-searches', [SavedSearchController::class, 'store']);
+        Route::patch('saved-searches/{id}', [SavedSearchController::class, 'update'])->where('id', '[0-9a-hjkmnp-tv-z]{26}');
+        Route::delete('saved-searches/{id}', [SavedSearchController::class, 'destroy'])->where('id', '[0-9a-hjkmnp-tv-z]{26}');
+
+        Route::get('follows', [FollowController::class, 'index']);
+        Route::put('follows/{userId}', [FollowController::class, 'store'])->where('userId', '[0-9a-hjkmnp-tv-z]{26}');
+        Route::delete('follows/{userId}', [FollowController::class, 'destroy'])->where('userId', '[0-9a-hjkmnp-tv-z]{26}');
+
+        Route::get('recently-viewed', [RecentlyViewedController::class, 'index']);
+        Route::delete('recently-viewed', [RecentlyViewedController::class, 'destroy']);
     });
+
+    // ── صفحات البائعين العامة ─────────────────────────────────────────
+    Route::get('users/{id}', [SellerController::class, 'show'])->where('id', '[0-9a-hjkmnp-tv-z]{26}');
+    Route::get('users/{id}/listings', [SellerController::class, 'listings'])->where('id', '[0-9a-hjkmnp-tv-z]{26}');
+    Route::get('users/{id}/stats', [SellerController::class, 'stats'])->where('id', '[0-9a-hjkmnp-tv-z]{26}');
 });

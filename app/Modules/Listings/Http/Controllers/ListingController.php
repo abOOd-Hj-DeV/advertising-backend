@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\Listings\Http\Controllers;
 
+use App\Modules\Engagement\Http\Controllers\RecentlyViewedController;
+use App\Modules\Engagement\Models\Favorite;
 use App\Modules\Listings\Http\Requests\ListingPayload;
 use App\Modules\Listings\Http\Resources\ListingCardResource;
 use App\Modules\Listings\Http\Resources\ListingResource;
@@ -48,6 +50,14 @@ class ListingController extends Controller
         if (! $isOwner && in_array($listing->status, Listing::PUBLIC_STATUSES, true)) {
             Listing::query()->whereKey($listing->id)->increment('views_count');
             $listing->views_count++;
+        }
+
+        if ($request->user()) {
+            $listing->setAttribute('is_favorite', Favorite::query()
+                ->where('user_id', $request->user()->id)
+                ->where('listing_id', $listing->id)
+                ->exists());
+            RecentlyViewedController::record($request->user()->id, $listing->id);
         }
 
         return (new ListingResource($listing))->response();
