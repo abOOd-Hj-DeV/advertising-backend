@@ -47,7 +47,7 @@ class SellerController extends Controller
             ->where('user_id', $id)
             ->whereIn('status', Listing::PUBLIC_STATUSES)
             ->where('moderation_state', Listing::MODERATION_CLEAN)
-            ->with(['media', 'location']);
+            ->with(['media', 'location', 'category', 'user']);
 
         $page = CursorPage::paginate($query, 'published_at', 'desc', $validated['cursor'] ?? null, (int) ($validated['limit'] ?? CursorPage::DEFAULT_LIMIT));
 

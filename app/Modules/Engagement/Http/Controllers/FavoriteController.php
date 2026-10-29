@@ -27,7 +27,7 @@ class FavoriteController extends Controller
             ->join('favorites', 'favorites.listing_id', '=', 'listings.id')
             ->where('favorites.user_id', $request->user()->id)
             ->select('listings.*')
-            ->with(['media', 'location']);
+            ->with(['media', 'location', 'category', 'user']);
 
         $page = CursorPage::paginate(
             $query, 'favorites.created_at', 'desc',

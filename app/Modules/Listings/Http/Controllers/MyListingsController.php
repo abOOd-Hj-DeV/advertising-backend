@@ -25,7 +25,7 @@ class MyListingsController extends Controller
 
         $query = Listing::query()
             ->where('user_id', $request->user()->id)
-            ->with(['media', 'location'])
+            ->with(['media', 'location', 'category', 'user'])
             ->when($status !== 'all', function ($q) use ($status): void {
                 if ($status === 'deleted') {
                     $q->onlyTrashed();

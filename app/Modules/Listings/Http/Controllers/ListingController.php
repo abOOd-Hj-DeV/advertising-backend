@@ -163,7 +163,7 @@ class ListingController extends Controller
             ->where('id', '!=', $listing->id)
             ->whereIn('status', [Listing::STATUS_ACTIVE])
             ->where('moderation_state', Listing::MODERATION_CLEAN)
-            ->with(['media', 'location'])
+            ->with(['media', 'location', 'category', 'user'])
             ->orderByDesc('published_at')
             ->limit(10)
             ->get();

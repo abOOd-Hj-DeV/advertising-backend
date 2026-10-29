@@ -37,7 +37,7 @@ class ListingSearchController extends Controller
         $query = Listing::query()
             ->where('status', Listing::STATUS_ACTIVE)
             ->where('moderation_state', Listing::MODERATION_CLEAN)
-            ->with(['media', 'location']);
+            ->with(['media', 'location', 'category', 'user']);
 
         if (! empty($validated['q'])) {
             $q = $validated['q'];

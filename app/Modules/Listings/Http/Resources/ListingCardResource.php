@@ -29,6 +29,17 @@ class ListingCardResource extends JsonResource
             'location_label' => $this->relationLoaded('location')
                 ? "{$this->location->governorate} — {$this->location->city}"
                 : null,
+            'governorate' => $this->relationLoaded('location') ? $this->location->governorate : null,
+            'city' => $this->relationLoaded('location') ? $this->location->city : null,
+            'district' => $this->relationLoaded('location') ? $this->location->district : null,
+            'category_id' => $this->category_id,
+            'category_name' => $this->relationLoaded('category') ? $this->category?->name_ar : null,
+            'shipping_available' => (bool) $this->shipping_available,
+            'seller_id' => $this->user_id,
+            'seller_name' => $this->relationLoaded('user') ? $this->user->display_name : null,
+            'seller_commercial' => $this->relationLoaded('user')
+                ? $this->user->account_type === 'commercial'
+                : null,
             'published_at' => $this->published_at?->toIso8601String(),
             'favorites_count' => $this->favorites_count,
         ];
