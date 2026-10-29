@@ -19,6 +19,9 @@ use App\Modules\Listings\Http\Controllers\ListingController;
 use App\Modules\Listings\Http\Controllers\ListingSearchController;
 use App\Modules\Listings\Http\Controllers\MediaController;
 use App\Modules\Listings\Http\Controllers\MyListingsController;
+use App\Modules\Messaging\Http\Controllers\ConversationController;
+use App\Modules\Messaging\Http\Controllers\MessageController;
+use App\Modules\Safety\Http\Controllers\BlockController;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -156,6 +159,21 @@ Route::prefix('v1')->group(function (): void {
 
         Route::get('recently-viewed', [RecentlyViewedController::class, 'index']);
         Route::delete('recently-viewed', [RecentlyViewedController::class, 'destroy']);
+
+        // ── Messaging ─────────────────────────────────────────────────
+        Route::get('conversations', [ConversationController::class, 'index']);
+        Route::post('conversations', [ConversationController::class, 'store'])->middleware('idempotency');
+        Route::get('conversations/{id}', [ConversationController::class, 'show'])->where('id', '[0-9a-hjkmnp-tv-z]{26}');
+        Route::patch('conversations/{id}', [ConversationController::class, 'update'])->where('id', '[0-9a-hjkmnp-tv-z]{26}');
+        Route::delete('conversations/{id}', [ConversationController::class, 'destroy'])->where('id', '[0-9a-hjkmnp-tv-z]{26}');
+        Route::get('conversations/{id}/messages', [MessageController::class, 'index'])->where('id', '[0-9a-hjkmnp-tv-z]{26}');
+        Route::post('conversations/{id}/messages', [MessageController::class, 'store'])->middleware('idempotency')->where('id', '[0-9a-hjkmnp-tv-z]{26}');
+        Route::post('conversations/{id}/read', [ConversationController::class, 'markRead'])->where('id', '[0-9a-hjkmnp-tv-z]{26}');
+
+        // ── Safety ────────────────────────────────────────────────────
+        Route::get('blocks', [BlockController::class, 'index']);
+        Route::put('blocks/{userId}', [BlockController::class, 'store'])->where('userId', '[0-9a-hjkmnp-tv-z]{26}');
+        Route::delete('blocks/{userId}', [BlockController::class, 'destroy'])->where('userId', '[0-9a-hjkmnp-tv-z]{26}');
     });
 
     // ── صفحات البائعين العامة ─────────────────────────────────────────
