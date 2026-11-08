@@ -1,6 +1,17 @@
 # سوقنا — كتيّب التشغيل (Runbook)
 
-إطلاق مغلق: قاعدة PostgreSQL واحدة + Redis + S3/MinIO + worker + scheduler. كل خدمة في `docker-compose.yml` لها `restart: unless-stopped` وhealthcheck.
+إطلاق مغلق: قاعدة PostgreSQL واحدة + Redis + S3/MinIO + worker + scheduler.
+
+- `docker-compose.yml` للتطوير فقط (الكود كـvolume، كلمات مرور محلية، منافذ مكشوفة).
+- **الإنتاج**: `docker-compose.prod.yml` + `docker/php/Dockerfile.prod` — الكود والتبعيات داخل الصورة، opcache، `restart: unless-stopped` وhealthcheck لكل خدمة، لا منافذ مكشوفة إلا nginx، الأسرار من `.env.production` (انسخ `.env.production.example`). التشغيل:
+
+```sh
+cp .env.production.example .env.production   # املأ CHANGE_ME و APP_KEY
+docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
+docker compose -f docker-compose.prod.yml exec app php artisan db:seed --force   # الفهرس + AdminSeeder
+```
+
+TLS يُنهى أمام nginx (Caddy/Traefik/موازن المزوّد).
 
 ## الأسرار والإعداد
 
@@ -36,12 +47,12 @@
 
 - `GET /api/v1/health` — حياة العملية فقط.
 - `GET /api/v1/ready` — DB + cache + queue؛ 503 عند التدهور.
-- مجدول: `listings:expire` كل ساعة، `saved-searches:match` كل ساعة، `media:gc` يوميًا.
+- مجدول: `listings:expire` كل ساعة، `saved-searches:match` كل ساعة، `media:gc` يوميًا (وسائط يتيمة > 24 ساعة؛ `--dry-run` للمعاينة).
 
 ## الإطلاق المغلق
 
 1. `APP_ENV=production` + مفاتيح حقيقية + `php artisan config:cache route:cache`.
 2. `migrate --force` + `db:seed` (الفهرس فقط).
-3. admin واحد (Filament) بدور `admin` + 2FA.
+3. admin واحد (Filament): اضبط `ADMIN_EMAIL`/`ADMIN_PASSWORD` ثم `php artisan db:seed --class=AdminSeeder --force`؛ 2FA غير مفعّل بعد في Filament — احصر `/admin` خلف VPN/IP allowlist حتى تفعيله.
 4. تحقق من `/ready` = ok و`queue:failed` فارغة قبل فتح الترافيك.
 5. مستخدمون مدعوون فقط؛ راقب `audit_logs` و`moderation_actions`.

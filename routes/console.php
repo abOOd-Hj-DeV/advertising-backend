@@ -2,6 +2,7 @@
 
 use App\Modules\Engagement\Console\MatchSavedSearches;
 use App\Modules\Listings\Console\ExpireListings;
+use App\Modules\Listings\Console\GarbageCollectMedia;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Schedule;
@@ -12,3 +13,4 @@ Artisan::command('inspire', function () {
 
 Schedule::command(ExpireListings::class)->hourly()->withoutOverlapping();
 Schedule::command(MatchSavedSearches::class)->hourly()->withoutOverlapping();
+Schedule::command(GarbageCollectMedia::class)->daily()->withoutOverlapping();

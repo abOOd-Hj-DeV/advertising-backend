@@ -52,9 +52,6 @@ jobs:
       DB_USERNAME: sooqna
       DB_PASSWORD: sooqna_test
       REDIS_HOST: 127.0.0.1
-      CACHE_STORE: redis
-      QUEUE_CONNECTION: redis
-      FILESYSTEM_DISK: local
     steps:
       - uses: actions/checkout@v4
       - uses: shivammathur/setup-php@v2

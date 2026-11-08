@@ -25,3 +25,9 @@
 Homestead.json
 Homestead.yaml
 Thumbs.db
+
+# أدوات محلية — لا تُلتزم
+/sooqna
+*.sqlite
+.env.*.bak
+.env.docker*

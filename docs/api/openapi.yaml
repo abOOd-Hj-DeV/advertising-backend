@@ -425,7 +425,7 @@ paths:
         '410': { description: محذوف/محجوب — مثل «الإعلان غير متوفر», content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } } }
     patch:
       tags: [listings]
-      summary: تعديل — If-Match: <version>
+      summary: 'تعديل — If-Match: <version>'
       operationId: updateListing
       security: [{ bearerAuth: [] }]
       parameters:

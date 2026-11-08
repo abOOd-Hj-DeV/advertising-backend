@@ -1,0 +1,95 @@
+# إنتاج / إطلاق مغلق: docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
+# الفروق عن docker-compose.yml: صورة إنتاجية بلا volume للكود، restart دائم، لا منافذ مكشوفة
+# لقاعدة البيانات/Redis/MinIO، الأسرار من .env.production فقط، config/route cache عند الإقلاع.
+x-app: &app
+  image: sooqna-api:${APP_VERSION:-latest}
+  build:
+    context: .
+    dockerfile: docker/php/Dockerfile.prod
+  env_file: .env.production
+  restart: unless-stopped
+  volumes:
+    - storage:/var/www/html/storage
+  depends_on:
+    postgres: { condition: service_healthy }
+    redis: { condition: service_healthy }
+
+services:
+  app:
+    <<: *app
+    command: >
+      sh -c "php artisan config:cache && php artisan route:cache && php artisan view:cache
+             && php artisan migrate --force && php artisan media:ensure-bucket || true
+             && php-fpm"
+    healthcheck:
+      test: ["CMD-SHELL", "php -r 'exit(@fsockopen(\"127.0.0.1\", 9000) ? 0 : 1);'"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  nginx:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    ports:
+      - "${HTTP_PORT:-80}:80"
+    volumes:
+      - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - public:/var/www/html/public:ro
+    depends_on:
+      app: { condition: service_healthy }
+
+  worker:
+    <<: *app
+    command: php artisan queue:work redis --tries=3 --backoff=5 --timeout=90 --max-jobs=1000
+    depends_on:
+      app: { condition: service_healthy }
+
+  scheduler:
+    <<: *app
+    command: php artisan schedule:work
+    depends_on:
+      app: { condition: service_healthy }
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_DATABASE:?set in .env.production}
+      POSTGRES_USER: ${DB_USERNAME:?set in .env.production}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?set in .env.production}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:?set in .env.production}"]
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a $${REDIS_PASSWORD} ping | grep PONG"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  minio:
+    image: cgr.dev/chainguard/minio:latest
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${AWS_ACCESS_KEY_ID:?set in .env.production}
+      MINIO_ROOT_PASSWORD: ${AWS_SECRET_ACCESS_KEY:?set in .env.production}
+    volumes:
+      - miniodata:/data
+
+volumes:
+  pgdata:
+  redisdata:
+  miniodata:
+  storage:
+  public:

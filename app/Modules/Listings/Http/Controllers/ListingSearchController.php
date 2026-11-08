@@ -10,6 +10,7 @@ use App\Modules\Listings\Support\CursorPage;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
+use Illuminate\Support\Facades\DB;
 
 class ListingSearchController extends Controller
 {
@@ -41,9 +42,11 @@ class ListingSearchController extends Controller
 
         if (! empty($validated['q'])) {
             $q = $validated['q'];
-            $query->where(function ($w) use ($q): void {
-                $w->where('title', 'like', "%{$q}%")
-                    ->orWhere('description', 'like', "%{$q}%");
+            // Postgres: ILIKE يستفيد من فهارس pg_trgm (انظر migration 2026_11_08)
+            $like = DB::connection()->getDriverName() === 'pgsql' ? 'ilike' : 'like';
+            $query->where(function ($w) use ($q, $like): void {
+                $w->where('title', $like, "%{$q}%")
+                    ->orWhere('description', $like, "%{$q}%");
             });
         }
 

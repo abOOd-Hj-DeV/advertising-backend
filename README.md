@@ -3,7 +3,14 @@
 Backend تطبيق الإعلانات المبوّبة للسوق السوري (سوقنا / Sooqna). الواجهة في مستودع [`advertising`](https://github.com/abOOd-Hj-DeV/advertising) (Flutter).
 
 ## الحالة
-المرحلة 0 — عقود التنفيذ. لا كود تنفيذي للميزات بعد.
+MVP منفّذ (هوية، كتالوج، إعلانات ووسائط، بحث، تفاعل، مراسلة، إشعارات، بلاغات، لوحة إشراف Filament). 81/84 endpoint من عقد OpenAPI؛ غير المنفّذ: `categories/{id}/attributes` و`me/exports`.
+
+## التشغيل محليًا
+```sh
+cp .env.example .env && docker compose up -d --build
+docker compose exec app php artisan key:generate && docker compose exec app php artisan migrate --seed
+```
+الاختبارات: `php artisan test` (SQLite محليًا؛ CI يشغّلها على PostgreSQL + Redis). النشر: [docs/runbook.md](docs/runbook.md).
 
 ## الوثائق (docs/)
 | الملف | المحتوى |
