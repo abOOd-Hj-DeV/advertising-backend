@@ -33,7 +33,7 @@ class ListingCardResource extends JsonResource
             'city' => $this->relationLoaded('location') ? $this->location->city : null,
             'district' => $this->relationLoaded('location') ? $this->location->district : null,
             'category_id' => $this->category_id,
-            'category_name' => $this->relationLoaded('category') ? $this->category?->name_ar : null,
+            'category_name' => $this->relationLoaded('category') ? $this->category->name_ar : null,
             'shipping_available' => (bool) $this->shipping_available,
             'seller_id' => $this->user_id,
             'seller_name' => $this->relationLoaded('user') ? $this->user->display_name : null,
